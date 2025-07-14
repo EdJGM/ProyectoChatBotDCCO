@@ -6,10 +6,14 @@ import 'controllers/chat_controller.dart';
 import 'controllers/settings_controller.dart';
 import 'models/user_model.dart';
 import 'package:chatbot_dcco/themes/my_theme.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializa Firebase
+  await Firebase.initializeApp();
 
   // Inicializa Hive
   await ChatProvider.initHive();

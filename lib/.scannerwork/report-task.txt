@@ -1,0 +1,6 @@
+projectKey=Frontend-Chatbot
+serverUrl=http://localhost:9000
+serverVersion=25.1.0.102122
+dashboardUrl=http://localhost:9000/dashboard?id=Frontend-Chatbot
+ceTaskId=145147f7-7e32-4330-9b00-07158d30d151
+ceTaskUrl=http://localhost:9000/api/ce/task?id=145147f7-7e32-4330-9b00-07158d30d151

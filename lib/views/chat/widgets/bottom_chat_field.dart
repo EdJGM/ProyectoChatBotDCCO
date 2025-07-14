@@ -36,16 +36,37 @@ class _BottomChatFieldState extends State<BottomChatField> {
     required ChatProvider chatProvider,
     required bool isTextOnly,
   }) async {
+    // Verificar que el mensaje no esté vacío
+    if (message.trim().isEmpty) {
+      return;
+    }
+
+    // Verificar que no se esté enviando otro mensaje
+    if (chatProvider.isLoading) {
+      return;
+    }
+
     try {
+      // Limpiar el campo de texto inmediatamente
+      textController.clear();
+      textFieldFocus.unfocus();
+
+      // Llamar al método para enviar el mensaje
       await chatProvider.sentMessage(
-        message: message,
+        message: message.trim(),
         isTextOnly: isTextOnly,
       );
     } catch (e) {
-      log('error : $e');
-    } finally {
-      textController.clear();
-      textFieldFocus.unfocus();
+      log('Error al enviar mensaje: $e');
+      // Mostrar un snackbar o mensaje de error si es necesario
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al enviar mensaje: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "123122711794",
+    "project_id": "chatbotdcco-feedback",
+    "storage_bucket": "chatbotdcco-feedback.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:123122711794:android:63cd3ab7ca68deed1f646b",
+        "android_client_info": {
+          "package_name": "es.edu.espe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBaDylAF0wScxfleOLDI_gSZDT9vh31Myk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,16 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer';
 import 'package:chatbot_dcco/models/chat_history.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'package:chatbot_dcco/constants/constants.dart';
 import 'package:chatbot_dcco/views/chat/widgets/boxes.dart';
-import 'package:chatbot_dcco/views/chat/chat_history_screen.dart';
 import 'package:chatbot_dcco/models/settings.dart';
 import 'package:chatbot_dcco/models/user_model.dart';
 import 'package:chatbot_dcco/models/message.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 
 class ChatProvider extends ChangeNotifier {
   // list of messages
@@ -165,70 +166,130 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-//?yeha samma
-
   Future<void> sentMessage({
     required String message,
     required bool isTextOnly,
   }) async {
-    // Obtener el ID del chat actual o crear uno nuevo si no existe
-    String chatId = getChatId();
+    // Establecer estado de carga
+    setLoading(value: true);
 
-    final chatBox = Boxes.getChatHistory();
-    if (chatBox.get(chatId) == null) {
-      // Crear el chat y actualizar el currentChatId con el ID generado
-      chatId = await createNewChat(
-        title: 'Chat ${DateTime.now().toString().substring(0, 16)}',
-        modelType: modelType,
+    try {
+      // Obtener el ID del chat actual o crear uno nuevo si no existe
+      String chatId = currentChatId;
+
+      // Si no hay chat actual, crear uno nuevo
+      if (chatId.isEmpty) {
+        chatId = await createNewChat(
+          title: 'Chat ${DateTime.now().toString().substring(0, 16)}',
+          modelType: modelType,
+        );
+      }
+
+      // Verificar si el chat existe en la base de datos
+      final chatBox = Boxes.getChatHistory();
+      if (chatBox.get(chatId) == null) {
+        // Crear el chat si no existe
+        chatId = await createNewChat(
+          title: 'Chat ${DateTime.now().toString().substring(0, 16)}',
+          modelType: modelType,
+        );
+      }
+
+      // Abrir o crear el box de mensajes para este chat
+      if (!Hive.isBoxOpen('${Constants.chatMessagesBox}$chatId')) {
+        await Hive.openBox('${Constants.chatMessagesBox}$chatId');
+      }
+      final messageBox = Hive.box('${Constants.chatMessagesBox}$chatId');
+
+      // Crear un mensaje del usuario
+      final userMessage = Message(
+        messageId: DateTime.now().millisecondsSinceEpoch.toString(),
+        chatId: chatId,
+        message: StringBuffer(message),
+        timeSent: DateTime.now(),
+        isFromUser: true,
       );
+
+      // Agregar el mensaje del usuario a la lista PRIMERO
+      _inChatMessages.add(userMessage);
+      notifyListeners();
+
+      // Guardar el mensaje del usuario en la base de datos
+      await messageBox.put(userMessage.messageId, userMessage.toMap());
+
+      // Actualizar el último mensaje en el historial
+      await updateLastMessage(chatId: chatId, message: message);
+
+      // Llamar al backend para obtener la respuesta
+      try {
+        final url = Uri.parse('http://192.168.137.226:8000/api/chatbot/');
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'pregunta': message}),
+        );
+
+        if (response.statusCode == 200) {
+          final responseData = jsonDecode(response.body);
+          final assistantResponse = responseData['respuesta'] ?? 'Error: No se recibió respuesta';
+
+          // Crear un mensaje de respuesta del asistente
+          final assistantMessage = Message(
+            messageId: (DateTime.now().millisecondsSinceEpoch + 1).toString(), // +1 para evitar IDs duplicados
+            chatId: chatId,
+            message: StringBuffer(assistantResponse),
+            timeSent: DateTime.now(),
+            isFromUser: false,
+          );
+
+          // Agregar la respuesta del asistente a la lista
+          _inChatMessages.add(assistantMessage);
+          notifyListeners();
+
+          // Guardar la respuesta en la base de datos
+          await messageBox.put(assistantMessage.messageId, assistantMessage.toMap());
+
+          // Actualizar el último mensaje en el historial
+          await updateLastMessage(chatId: chatId, message: assistantResponse);
+
+        } else {
+          // Crear mensaje de error
+          final errorMessage = Message(
+            messageId: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+            chatId: chatId,
+            message: StringBuffer('Error: No se pudo obtener respuesta del servidor (${response.statusCode})'),
+            timeSent: DateTime.now(),
+            isFromUser: false,
+          );
+
+          _inChatMessages.add(errorMessage);
+          notifyListeners();
+
+          await messageBox.put(errorMessage.messageId, errorMessage.toMap());
+        }
+      } catch (e) {
+        log('Error al enviar la pregunta al backend: $e');
+
+        // Crear mensaje de error de conexión
+        final errorMessage = Message(
+          messageId: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          chatId: chatId,
+          message: StringBuffer('Error: No se pudo conectar con el servidor. Verifica tu conexión.'),
+          timeSent: DateTime.now(),
+          isFromUser: false,
+        );
+
+        _inChatMessages.add(errorMessage);
+        notifyListeners();
+
+        await messageBox.put(errorMessage.messageId, errorMessage.toMap());
+      }
+    } catch (e) {
+      log('Error general en sentMessage: $e');
+    } finally {
+      // Quitar estado de carga
+      setLoading(value: false);
     }
-
-    // Simular un retraso para imitar el tiempo de respuesta de un servidor
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    // Abrir o crear el box de mensajes para este chat
-    if (!Hive.isBoxOpen('${Constants.chatMessagesBox}$chatId')) {
-      await Hive.openBox('${Constants.chatMessagesBox}$chatId');
-    }
-    final messageBox = Hive.box('${Constants.chatMessagesBox}$chatId');
-
-    // Crear un mensaje del usuario
-    final userMessage = Message(
-      messageId: DateTime.now().millisecondsSinceEpoch.toString(),
-      chatId: chatId,
-      message: StringBuffer(message),
-      timeSent: DateTime.now(),
-      isFromUser: true,
-    );
-
-    // Guardar el mensaje del usuario en la base de datos
-    await messageBox.put(userMessage.messageId, userMessage.toMap());
-
-    // Actualizar el último mensaje en el historial
-    await updateLastMessage(chatId: chatId, message: message);
-
-    // Agregar el mensaje del usuario a la lista
-    _inChatMessages.add(userMessage);
-    notifyListeners();
-
-    // Crear una respuesta simulada del asistente
-    final assistantMessage = Message(
-      messageId: DateTime.now().millisecondsSinceEpoch.toString(),
-      chatId: chatId,
-      message: StringBuffer("Esta es una respuesta simulada a: \"$message\""),
-      timeSent: DateTime.now(),
-      isFromUser: false,
-    );
-
-    // Guardar la respuesta en la base de datos
-    await messageBox.put(assistantMessage.messageId, assistantMessage.toMap());
-
-    // Actualizar el último mensaje en el historial
-    await updateLastMessage(chatId: chatId, message: "Esta es una respuesta simulada a: \"$message\"");
-
-    // Agregar la respuesta simulada a la lista
-    _inChatMessages.add(assistantMessage);
-    notifyListeners();
   }
 
   // Método para cargar un chat específico
@@ -241,12 +302,23 @@ class ChatProvider extends ChangeNotifier {
   }
 
   String getChatId() {
-    if (currentChatId.isEmpty) {
-      return const Uuid().v4();
-    } else {
+    // Si ya hay un chat actual, devolverlo
+    if (currentChatId.isNotEmpty) {
       return currentChatId;
     }
+
+    // Si no hay chat actual, devolver un string vacío
+    // El nuevo chat se creará en sentMessage si es necesario
+    return '';
   }
+
+  // String getChatId() {
+  //   if (currentChatId.isEmpty) {
+  //     return const Uuid().v4();
+  //   } else {
+  //     return currentChatId;
+  //   }
+  // }
 
   // Crear un nuevo chat en el historial
   Future<String> createNewChat({
