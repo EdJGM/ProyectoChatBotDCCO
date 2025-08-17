@@ -222,7 +222,7 @@ class ChatProvider extends ChangeNotifier {
 
       // Llamar al backend para obtener la respuesta
       try {
-        final url = Uri.parse('http://192.168.137.226:8000/api/chatbot/');
+        final url = Uri.parse('http://74.235.218.90:8000/api/chatbot/');
         final response = await http.post(
           url,
           headers: {'Content-Type': 'application/json'},
